@@ -23,6 +23,8 @@ public class UpdateProductRequest
     public int? Stock { get; set; }
     public string[]? Images { get; set; }
     public ProductStatus? Status { get; set; }
+    public bool ClearDescription { get; set; }
+    public bool ClearImages { get; set; }
 }
 
 public class FilterProductsRequest : PagedRequest
@@ -33,4 +35,3 @@ public class FilterProductsRequest : PagedRequest
     public decimal? MaxPrice { get; set; }
     public ProductStatus? Status { get; set; }
 }
-

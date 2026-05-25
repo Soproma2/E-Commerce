@@ -18,28 +18,40 @@ public class CartController : BaseController
     [HttpGet]
     public async Task<IActionResult> GetCart()
     {
-        var result = await _cartServices.GetCart(GetUserId());
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _cartServices.GetCart(userId);
         return ToResponse(result);
     }
 
     [HttpPost("items")]
     public async Task<IActionResult> AddToCart([FromBody] AddToCartRequest request)
     {
-        var result = await _cartServices.AddToCart(GetUserId(), request);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _cartServices.AddToCart(userId, request);
         return ToResponse(result);
     }
 
     [HttpPut("items/{cartItemId}")]
     public async Task<IActionResult> EditCartItem(int cartItemId, [FromBody] EditCartItemRequest request)
     {
-        var result = await _cartServices.EditCartItem(GetUserId(), cartItemId, request);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _cartServices.EditCartItem(userId, cartItemId, request);
         return ToResponse(result);
     }
 
     [HttpDelete("items/{cartItemId}")]
     public async Task<IActionResult> DeleteCartItem(int cartItemId)
     {
-        var result = await _cartServices.DeleteCartItem(GetUserId(), cartItemId);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _cartServices.DeleteCartItem(userId, cartItemId);
         return ToResponse(result);
     }
 }

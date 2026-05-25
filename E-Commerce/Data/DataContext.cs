@@ -1,6 +1,7 @@
 using E_Commerce.DTOs.Requests;
 using E_Commerce.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Text.Json;
 
 namespace E_Commerce.Data;
@@ -21,6 +22,15 @@ public class DataContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        var stringArrayComparer = new ValueComparer<string[]?>(
+            (left, right) => left == null
+                ? right == null
+                : right != null && left.SequenceEqual(right),
+            value => value == null
+                ? 0
+                : value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item == null ? 0 : item.GetHashCode())),
+            value => value == null ? null : value.ToArray());
+
         // ─── User ───────────────────────────────────────────────
         modelBuilder.Entity<User>(e =>
         {
@@ -39,7 +49,8 @@ public class DataContext : DbContext
                 .IsRequired();
 
             e.Property(u => u.Role)
-                .HasConversion<string>();
+                .HasConversion<string>()
+                .HasMaxLength(20);
 
             e.HasIndex(u => u.Email).IsUnique();
             e.HasIndex(u => u.Username).IsUnique();
@@ -90,13 +101,15 @@ public class DataContext : DbContext
                 .HasColumnType("decimal(18,2)");
 
             e.Property(p => p.Status)
-                .HasConversion<string>();
+                .HasConversion<string>()
+                .HasMaxLength(20);
 
             e.Property(p => p.Images)
                 .HasConversion(
                     v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => v == null ? null : JsonSerializer.Deserialize<string[]>(v, (JsonSerializerOptions?)null)
-                );
+                )
+                .Metadata.SetValueComparer(stringArrayComparer);
         });
 
         // ─── Order ───────────────────────────────────────────────
@@ -106,7 +119,8 @@ public class DataContext : DbContext
             e.HasKey(o => o.Id);
 
             e.Property(o => o.Status)
-                .HasConversion<string>();
+                .HasConversion<string>()
+                .HasMaxLength(20);
 
             e.Property(o => o.TotalAmount)
                 .HasColumnType("decimal(18,2)");

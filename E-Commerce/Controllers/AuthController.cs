@@ -32,7 +32,10 @@ public class AuthController : BaseController
     [HttpPut("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var result = await _authServices.ChangePassword(GetUserId(), request);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _authServices.ChangePassword(userId, request);
         return ToResponse(result);
     }
 

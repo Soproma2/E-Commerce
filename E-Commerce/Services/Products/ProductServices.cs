@@ -36,8 +36,9 @@ public class ProductServices : IProductServices
         if (request.MaxPrice.HasValue)
             query = query.Where(p => p.Price <= request.MaxPrice);
 
-        if (request.Status.HasValue)
-            query = query.Where(p => p.Status == request.Status);
+        query = request.Status.HasValue
+            ? query.Where(p => p.Status == request.Status)
+            : query.Where(p => p.Status == ProductStatus.Active);
 
         var totalCount = await query.CountAsync();
 
@@ -116,10 +117,12 @@ public class ProductServices : IProductServices
         }
 
         if (request.Name is not null) product.Name = request.Name;
-        if (request.Description is not null) product.Description = request.Description;
+        if (request.ClearDescription) product.Description = null;
+        else if (request.Description is not null) product.Description = request.Description;
         if (request.Price.HasValue) product.Price = request.Price.Value;
         if (request.Stock.HasValue) product.Stock = request.Stock.Value;
-        if (request.Images is not null) product.Images = request.Images;
+        if (request.ClearImages) product.Images = null;
+        else if (request.Images is not null) product.Images = request.Images;
         if (request.Status.HasValue) product.Status = request.Status.Value;
 
         product.UpdateAt = DateTime.UtcNow;
@@ -136,6 +139,14 @@ public class ProductServices : IProductServices
 
         if (product is null)
             return Result<bool>.NotFound("Product not found.");
+
+        var hasOrderItems = await _context.OrderItems.AnyAsync(oi => oi.ProductId == id);
+        if (hasOrderItems)
+            return Result<bool>.BadRequest("Cannot delete a product that has orders.");
+
+        var hasCartItems = await _context.CartItems.AnyAsync(ci => ci.ProductId == id);
+        if (hasCartItems)
+            return Result<bool>.BadRequest("Cannot delete a product that is in carts.");
 
         _context.Products.Remove(product);
         await _context.SaveChangesAsync();

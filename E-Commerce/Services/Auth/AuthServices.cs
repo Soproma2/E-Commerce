@@ -6,6 +6,8 @@ using E_Commerce.DTOs.Responses;
 using E_Commerce.Enums;
 using E_Commerce.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace E_Commerce.Services.Auth;
 
@@ -33,6 +35,8 @@ public class AuthServices : IAuthServices
         if (request.Password != request.ConfirmPassword)
             return Result<TokenResponse>.BadRequest("Passwords do not match.");
 
+        var emailVerificationToken = _smtpServices.IsConfigured ? GenerateSecureToken() : null;
+
         var user = new User
         {
             Username = request.Username,
@@ -42,11 +46,31 @@ public class AuthServices : IAuthServices
             FirstName = request.FirstName,
             LastName = request.LastName,
             PhoneNumber = request.PhoneNumber,
-            Address = request.Address
+            Address = request.Address,
+            EmailVerificationTokenHash = emailVerificationToken is null ? null : HashToken(emailVerificationToken),
+            EmailVerificationTokenExpiresAt = emailVerificationToken is null ? null : DateTime.UtcNow.AddDays(1)
         };
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
+
+        if (emailVerificationToken is not null)
+        {
+            try
+            {
+                _smtpServices.SendEmail(
+                    subject: "Email Verification",
+                    email: user.Email,
+                    body: $"Your email verification token: {emailVerificationToken}"
+                );
+            }
+            catch
+            {
+                user.EmailVerificationTokenHash = null;
+                user.EmailVerificationTokenExpiresAt = null;
+                await _context.SaveChangesAsync();
+            }
+        }
 
         var token = _jwtService.GenerateJwtToken(user);
 
@@ -101,14 +125,33 @@ public class AuthServices : IAuthServices
         if (user is null)
             return Result<bool>.NotFound("User not found.");
 
-        var resetToken = Guid.NewGuid().ToString();
+        if (!_smtpServices.IsConfigured)
+            return Result<bool>.BadRequest("Email service is not configured.");
 
-        // TODO: store reset token with expiry in DB
-        _smtpServices.SendEmail(
-            subject: "Password Reset",
-            email: user.Email,
-            body: $"Your password reset token: {resetToken}"
-        );
+        var resetToken = GenerateSecureToken();
+
+        user.PasswordResetTokenHash = HashToken(resetToken);
+        user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+        user.UpdateAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        try
+        {
+            _smtpServices.SendEmail(
+                subject: "Password Reset",
+                email: user.Email,
+                body: $"Your password reset token: {resetToken}"
+            );
+        }
+        catch
+        {
+            user.PasswordResetTokenHash = null;
+            user.PasswordResetTokenExpiresAt = null;
+            user.UpdateAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Result<bool>.BadRequest("Password reset email could not be sent.");
+        }
 
         return Result<bool>.Ok(true);
     }
@@ -120,12 +163,22 @@ public class AuthServices : IAuthServices
         if (user is null)
             return Result<bool>.NotFound("User not found.");
 
-        // TODO: validate token from DB
+        var tokenHash = HashToken(request.Token);
+
+        if (user.PasswordResetTokenHash is null ||
+            user.PasswordResetTokenExpiresAt is null ||
+            user.PasswordResetTokenExpiresAt < DateTime.UtcNow ||
+            user.PasswordResetTokenHash != tokenHash)
+        {
+            return Result<bool>.BadRequest("Invalid or expired reset token.");
+        }
 
         if (request.NewPassword != request.ConfirmNewPassword)
             return Result<bool>.BadRequest("Passwords do not match.");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
         user.UpdateAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -140,10 +193,32 @@ public class AuthServices : IAuthServices
         if (user is null)
             return Result<bool>.NotFound("User not found.");
 
-        // TODO: validate token from DB
+        var tokenHash = HashToken(request.Token);
 
+        if (user.EmailVerificationTokenHash is null ||
+            user.EmailVerificationTokenExpiresAt is null ||
+            user.EmailVerificationTokenExpiresAt < DateTime.UtcNow ||
+            user.EmailVerificationTokenHash != tokenHash)
+        {
+            return Result<bool>.BadRequest("Invalid or expired verification token.");
+        }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationTokenHash = null;
+        user.EmailVerificationTokenExpiresAt = null;
+        user.UpdateAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return Result<bool>.Ok(true);
+    }
+
+    private static string GenerateSecureToken()
+    {
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    }
+
+    private static string HashToken(string token)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
     }
 }

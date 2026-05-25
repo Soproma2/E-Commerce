@@ -18,21 +18,30 @@ public class OrdersController : BaseController
     [HttpGet]
     public async Task<IActionResult> GetOrderHistory()
     {
-        var result = await _orderServices.GetOrderHistory(GetUserId());
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _orderServices.GetOrderHistory(userId);
         return ToResponse(result);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetOrderById(int id)
     {
-        var result = await _orderServices.GetOrderById(id, GetUserId());
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _orderServices.GetOrderById(id, userId);
         return ToResponse(result);
     }
 
     [HttpPost("checkout")]
     public async Task<IActionResult> Checkout([FromBody] CreateOrderRequest request)
     {
-        var result = await _orderServices.Checkout(GetUserId(), request);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _orderServices.Checkout(userId, request);
         return ToResponse(result);
     }
 
@@ -47,7 +56,10 @@ public class OrdersController : BaseController
     [HttpDelete("{id}")]
     public async Task<IActionResult> CancelOrder(int id)
     {
-        var result = await _orderServices.CancelOrder(id, GetUserId());
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _orderServices.CancelOrder(id, userId);
         return ToResponse(result);
     }
 }

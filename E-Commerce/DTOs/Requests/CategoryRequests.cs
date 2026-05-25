@@ -14,4 +14,7 @@ public class UpdateCategoryRequest
     public string? Description { get; set; }
     public string? Image { get; set; }
     public int? ParentId { get; set; }
+    public bool ClearDescription { get; set; }
+    public bool ClearImage { get; set; }
+    public bool ClearParent { get; set; }
 }

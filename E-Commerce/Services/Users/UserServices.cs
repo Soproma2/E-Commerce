@@ -38,10 +38,17 @@ public class UserServices : IUserServices
         if (user is null)
             return Result<UserResponse>.NotFound("User not found.");
 
-        if (request.FirstName is not null) user.FirstName = request.FirstName;
-        if (request.LastName is not null) user.LastName = request.LastName;
-        if (request.PhoneNumber is not null) user.PhoneNumber = request.PhoneNumber;
-        if (request.Address is not null) user.Address = request.Address;
+        if (request.ClearFirstName) user.FirstName = null;
+        else if (request.FirstName is not null) user.FirstName = request.FirstName;
+
+        if (request.ClearLastName) user.LastName = null;
+        else if (request.LastName is not null) user.LastName = request.LastName;
+
+        if (request.ClearPhoneNumber) user.PhoneNumber = null;
+        else if (request.PhoneNumber is not null) user.PhoneNumber = request.PhoneNumber;
+
+        if (request.ClearAddress) user.Address = null;
+        else if (request.Address is not null) user.Address = request.Address;
 
         user.UpdateAt = DateTime.UtcNow;
 
@@ -56,6 +63,10 @@ public class UserServices : IUserServices
 
         if (user is null)
             return Result<bool>.NotFound("User not found.");
+
+        var hasOrders = await _context.Orders.AnyAsync(o => o.UserId == id);
+        if (hasOrders)
+            return Result<bool>.BadRequest("Cannot delete a user that has orders.");
 
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
@@ -73,6 +84,7 @@ public class UserServices : IUserServices
         LastName = u.LastName,
         PhoneNumber = u.PhoneNumber,
         Address = u.Address,
+        IsEmailVerified = u.IsEmailVerified,
         CreatedAt = u.CreatedAt
     };
 }

@@ -8,6 +8,7 @@
         public static Result<T> Error(int status, string msg, List<string>? errors) => new(status, default, msg, errors);
         public static Result<T> BadRequest(string msg) => new(400, default, msg, default);
         public static Result<T> Unauthorized() => new(401, default, "User is not authorized.", default);
+        public static Result<T> Forbidden(string msg = "User is not allowed to access this resource.") => new(403, default, msg, default);
         public static Result<T> NotFound(string msg) => new(404, default, msg, default);
         public static Result<T> ValidationError(List<string> errors) => new(400, default, "Validation error", errors);
     }

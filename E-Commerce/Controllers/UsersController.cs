@@ -26,6 +26,12 @@ public class UsersController : BaseController
     [HttpGet("{id}")]
     public async Task<IActionResult> GetUserById(int id)
     {
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        if (!User.IsInRole("Admin") && userId != id)
+            return ForbiddenResponse("You can only access your own profile.");
+
         var result = await _userServices.GetUserById(id);
         return ToResponse(result);
     }
@@ -33,7 +39,10 @@ public class UsersController : BaseController
     [HttpPut]
     public async Task<IActionResult> EditUser([FromBody] EditUserRequest request)
     {
-        var result = await _userServices.EditUser(GetUserId(), request);
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _userServices.EditUser(userId, request);
         return ToResponse(result);
     }
 

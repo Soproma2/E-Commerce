@@ -58,6 +58,14 @@ public class UpdateProductValidator : AbstractValidator<UpdateProductRequest>
         RuleFor(x => x.Images)
             .Must(images => images!.Length <= 10).WithMessage("Maximum 10 images allowed.")
             .When(x => x.Images is not null);
+
+        RuleFor(x => x)
+            .Must(x => !(x.ClearDescription && x.Description is not null))
+            .WithMessage("Description cannot be set and cleared at the same time.");
+
+        RuleFor(x => x)
+            .Must(x => !(x.ClearImages && x.Images is not null))
+            .WithMessage("Images cannot be set and cleared at the same time.");
     }
 }
 

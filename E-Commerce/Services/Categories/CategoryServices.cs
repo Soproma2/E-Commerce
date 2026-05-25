@@ -72,7 +72,11 @@ public class CategoryServices : ICategoryServices
         if (category is null)
             return Result<CategoryResponse>.NotFound("Category not found.");
 
-        if (request.ParentId.HasValue)
+        if (request.ClearParent)
+        {
+            category.ParentId = null;
+        }
+        else if (request.ParentId.HasValue)
         {
             if (request.ParentId == id)
                 return Result<CategoryResponse>.BadRequest("Category cannot be its own parent.");
@@ -81,12 +85,17 @@ public class CategoryServices : ICategoryServices
             if (!parentExists)
                 return Result<CategoryResponse>.NotFound("Parent category not found.");
 
+            if (await WouldCreateCycle(id, request.ParentId.Value))
+                return Result<CategoryResponse>.BadRequest("Category cannot use one of its subcategories as parent.");
+
             category.ParentId = request.ParentId;
         }
 
         if (request.Name is not null) category.Name = request.Name;
-        if (request.Description is not null) category.Description = request.Description;
-        if (request.Image is not null) category.Image = request.Image;
+        if (request.ClearDescription) category.Description = null;
+        else if (request.Description is not null) category.Description = request.Description;
+        if (request.ClearImage) category.Image = null;
+        else if (request.Image is not null) category.Image = request.Image;
 
         category.UpdateAt = DateTime.UtcNow;
 
@@ -127,4 +136,25 @@ public class CategoryServices : ICategoryServices
         ParentName = c.Parent?.Name,
         SubCategories = c.SubCategories.Select(MapToResponse).ToList()
     };
+
+    private async Task<bool> WouldCreateCycle(int categoryId, int parentId)
+    {
+        var currentParentId = parentId;
+
+        while (true)
+        {
+            if (currentParentId == categoryId)
+                return true;
+
+            var nextParentId = await _context.Categories
+                .Where(c => c.Id == currentParentId)
+                .Select(c => c.ParentId)
+                .FirstOrDefaultAsync();
+
+            if (!nextParentId.HasValue)
+                return false;
+
+            currentParentId = nextParentId.Value;
+        }
+    }
 }

@@ -2,6 +2,7 @@ using E_Commerce.Common.Results;
 using E_Commerce.Data;
 using E_Commerce.DTOs.Requests;
 using E_Commerce.DTOs.Responses;
+using E_Commerce.Enums;
 using E_Commerce.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,16 +30,20 @@ public class CartServices : ICartServices
         if (product is null)
             return Result<CartResponse>.NotFound("Product not found.");
 
-        if (product.Stock < request.Quantity)
-            return Result<CartResponse>.BadRequest("Insufficient stock.");
+        if (product.Status != ProductStatus.Active)
+            return Result<CartResponse>.BadRequest("Product is not available.");
 
         var cart = await GetOrCreateCart(userId);
 
         var existingItem = cart.CartItems.FirstOrDefault(ci => ci.ProductId == request.ProductId);
+        var requestedTotalQuantity = (existingItem?.Quantity ?? 0) + request.Quantity;
+
+        if (product.Stock < requestedTotalQuantity)
+            return Result<CartResponse>.BadRequest("Insufficient stock.");
 
         if (existingItem is not null)
         {
-            existingItem.Quantity += request.Quantity;
+            existingItem.Quantity = requestedTotalQuantity;
         }
         else
         {
@@ -79,6 +84,12 @@ public class CartServices : ICartServices
         }
         else
         {
+            if (item.Product.Status != ProductStatus.Active)
+                return Result<CartResponse>.BadRequest("Product is not available.");
+
+            if (item.Product.Stock < request.Quantity)
+                return Result<CartResponse>.BadRequest("Insufficient stock.");
+
             item.Quantity = request.Quantity;
         }
 
