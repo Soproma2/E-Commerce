@@ -116,6 +116,18 @@ public class VerifyEmailValidator : AbstractValidator<VerifyEmailRequest>
             .EmailAddress().WithMessage("Invalid email format.");
 
         RuleFor(x => x.Token)
-            .NotEmpty().WithMessage("Token is required.");
+            .NotEmpty().WithMessage("Token is required.")
+            .Length(6).WithMessage("Verification code must be 6 digits.")
+            .Matches("^[0-9]{6}$").WithMessage("Verification code must contain only digits.");
+    }
+}
+
+public class ResendEmailVerificationValidator : AbstractValidator<ResendEmailVerificationRequest>
+{
+    public ResendEmailVerificationValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Invalid email format.");
     }
 }

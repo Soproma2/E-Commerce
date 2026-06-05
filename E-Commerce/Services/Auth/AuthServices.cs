@@ -13,6 +13,8 @@ namespace E_Commerce.Services.Auth;
 
 public class AuthServices : IAuthServices
 {
+    private const int EmailVerificationCodeMinutes = 10;
+
     private readonly DataContext _context;
     private readonly JwtService _jwtService;
     private readonly SmtpServices _smtpServices;
@@ -24,18 +26,21 @@ public class AuthServices : IAuthServices
         _smtpServices = smtpServices;
     }
 
-    public async Task<Result<TokenResponse>> Register(RegisterRequest request)
+    public async Task<Result<bool>> Register(RegisterRequest request)
     {
+        if (!_smtpServices.IsConfigured)
+            return Result<bool>.BadRequest("Email service is not configured.");
+
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-            return Result<TokenResponse>.BadRequest("Email already in use.");
+            return Result<bool>.BadRequest("Email already in use.");
 
         if (await _context.Users.AnyAsync(u => u.Username == request.Username))
-            return Result<TokenResponse>.BadRequest("Username already taken.");
+            return Result<bool>.BadRequest("Username already taken.");
 
         if (request.Password != request.ConfirmPassword)
-            return Result<TokenResponse>.BadRequest("Passwords do not match.");
+            return Result<bool>.BadRequest("Passwords do not match.");
 
-        var emailVerificationToken = _smtpServices.IsConfigured ? GenerateSecureToken() : null;
+        var emailVerificationCode = GenerateVerificationCode();
 
         var user = new User
         {
@@ -47,38 +52,27 @@ public class AuthServices : IAuthServices
             LastName = request.LastName,
             PhoneNumber = request.PhoneNumber,
             Address = request.Address,
-            EmailVerificationTokenHash = emailVerificationToken is null ? null : HashToken(emailVerificationToken),
-            EmailVerificationTokenExpiresAt = emailVerificationToken is null ? null : DateTime.UtcNow.AddDays(1)
+            IsEmailVerified = false,
+            EmailVerificationTokenHash = HashToken(emailVerificationCode),
+            EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddMinutes(EmailVerificationCodeMinutes)
         };
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        if (emailVerificationToken is not null)
+        try
         {
-            try
-            {
-                _smtpServices.SendEmail(
-                    subject: "Email Verification",
-                    email: user.Email,
-                    body: $"Your email verification token: {emailVerificationToken}"
-                );
-            }
-            catch
-            {
-                user.EmailVerificationTokenHash = null;
-                user.EmailVerificationTokenExpiresAt = null;
-                await _context.SaveChangesAsync();
-            }
+            SendVerificationEmail(user.Email, emailVerificationCode);
+        }
+        catch
+        {
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            return Result<bool>.BadRequest("Verification email could not be sent.");
         }
 
-        var token = _jwtService.GenerateJwtToken(user);
-
-        return Result<TokenResponse>.Success(201, new TokenResponse
-        {
-            Token = token,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30)
-        });
+        return Result<bool>.Success(201, true);
     }
 
     public async Task<Result<TokenResponse>> Login(LoginRequest request)
@@ -87,6 +81,9 @@ public class AuthServices : IAuthServices
 
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return Result<TokenResponse>.BadRequest("Invalid email or password.");
+
+        if (!user.IsEmailVerified)
+            return Result<TokenResponse>.BadRequest("Please verify your email before logging in.");
 
         var token = _jwtService.GenerateJwtToken(user);
 
@@ -200,7 +197,7 @@ public class AuthServices : IAuthServices
             user.EmailVerificationTokenExpiresAt < DateTime.UtcNow ||
             user.EmailVerificationTokenHash != tokenHash)
         {
-            return Result<bool>.BadRequest("Invalid or expired verification token.");
+            return Result<bool>.BadRequest("Invalid or expired verification code.");
         }
 
         user.IsEmailVerified = true;
@@ -212,13 +209,72 @@ public class AuthServices : IAuthServices
         return Result<bool>.Ok(true);
     }
 
+    public async Task<Result<bool>> ResendEmailVerification(ResendEmailVerificationRequest request)
+    {
+        if (!_smtpServices.IsConfigured)
+            return Result<bool>.BadRequest("Email service is not configured.");
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+
+        if (user is null)
+            return Result<bool>.NotFound("User not found.");
+
+        if (user.IsEmailVerified)
+            return Result<bool>.BadRequest("Email is already verified.");
+
+        if (user.EmailVerificationTokenHash is not null &&
+            user.EmailVerificationTokenExpiresAt.HasValue &&
+            user.EmailVerificationTokenExpiresAt > DateTime.UtcNow)
+        {
+            return Result<bool>.BadRequest("Verification code is still valid. You can request a new code after it expires.");
+        }
+
+        var emailVerificationCode = GenerateVerificationCode();
+
+        user.EmailVerificationTokenHash = HashToken(emailVerificationCode);
+        user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddMinutes(EmailVerificationCodeMinutes);
+        user.UpdateAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        try
+        {
+            SendVerificationEmail(user.Email, emailVerificationCode);
+        }
+        catch
+        {
+            user.EmailVerificationTokenHash = null;
+            user.EmailVerificationTokenExpiresAt = null;
+            user.UpdateAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Result<bool>.BadRequest("Verification email could not be sent.");
+        }
+
+        return Result<bool>.Ok(true);
+    }
+
     private static string GenerateSecureToken()
     {
         return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
     }
 
+    private static string GenerateVerificationCode()
+    {
+        return RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+    }
+
     private static string HashToken(string token)
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+    }
+
+    private void SendVerificationEmail(string email, string code)
+    {
+        _smtpServices.SendEmail(
+            subject: "Email Verification",
+            email: email,
+            body: $"Your email verification code: {code}\n\nThis code expires in {EmailVerificationCodeMinutes} minutes."
+        );
     }
 }

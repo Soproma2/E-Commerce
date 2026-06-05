@@ -59,4 +59,11 @@ public class AuthController : BaseController
         var result = await _authServices.VerifyEmail(request);
         return ToResponse(result);
     }
+
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendEmailVerification([FromBody] ResendEmailVerificationRequest request)
+    {
+        var result = await _authServices.ResendEmailVerification(request);
+        return ToResponse(result);
+    }
 }

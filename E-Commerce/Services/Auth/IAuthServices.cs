@@ -6,10 +6,11 @@ namespace E_Commerce.Services.Auth;
 
 public interface IAuthServices
 {
-    Task<Result<TokenResponse>> Register(RegisterRequest request);
+    Task<Result<bool>> Register(RegisterRequest request);
     Task<Result<TokenResponse>> Login(LoginRequest request);
     Task<Result<bool>> ChangePassword(int userId, ChangePasswordRequest request);
     Task<Result<bool>> ForgotPassword(ForgotPasswordRequest request);
     Task<Result<bool>> ResetPassword(ResetPasswordRequest request);
     Task<Result<bool>> VerifyEmail(VerifyEmailRequest request);
+    Task<Result<bool>> ResendEmailVerification(ResendEmailVerificationRequest request);
 }
