@@ -43,3 +43,13 @@ public class EditUserValidator : AbstractValidator<EditUserRequest>
             .WithMessage("Address cannot be set and cleared at the same time.");
     }
 }
+
+public class TopUpBalanceValidator : AbstractValidator<TopUpBalanceRequest>
+{
+    public TopUpBalanceValidator()
+    {
+        RuleFor(x => x.Amount)
+            .GreaterThan(0).WithMessage("Top-up amount must be greater than 0.")
+            .LessThanOrEqualTo(10000).WithMessage("Top-up amount cannot exceed 10000.");
+    }
+}

@@ -52,6 +52,10 @@ public class DataContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(20);
 
+            e.Property(u => u.Balance)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(1000m);
+
             e.HasIndex(u => u.Email).IsUnique();
             e.HasIndex(u => u.Username).IsUnique();
 

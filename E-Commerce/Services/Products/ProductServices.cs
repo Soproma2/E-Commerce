@@ -42,20 +42,31 @@ public class ProductServices : IProductServices
 
         var totalCount = await query.CountAsync();
 
-        var items = await query
+        var products = await query
             .Skip((request.Page - 1) * request.Take)
             .Take(request.Take)
-            .Select(p => new ProductResponse
+            .Select(p => new
             {
-                Id = p.Id,
-                Name = p.Name,
-                Price = p.Price,
-                Stock = p.Stock,
-                Images = p.Images,
-                Status = p.Status,
+                p.Id,
+                p.Name,
+                p.Price,
+                p.Stock,
+                p.Images,
+                p.Status,
                 CategoryName = p.Category.Name
             })
             .ToListAsync();
+
+        var items = products.Select(p => new ProductResponse
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Price = p.Price,
+            Stock = p.Stock,
+            Images = p.Images == null ? null : p.Images.Take(1).ToArray(),
+            Status = p.Status,
+            CategoryName = p.CategoryName
+        }).ToList();
 
         return Result<Paged<ProductResponse>>.Ok(new Paged<ProductResponse>(items, totalCount, request.Page, request.Take));
     }

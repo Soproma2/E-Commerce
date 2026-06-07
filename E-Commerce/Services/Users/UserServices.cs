@@ -57,6 +57,21 @@ public class UserServices : IUserServices
         return Result<UserResponse>.Ok(MapToResponse(user));
     }
 
+    public async Task<Result<UserResponse>> TopUpBalance(int userId, TopUpBalanceRequest request)
+    {
+        var user = await _context.Users.FindAsync(userId);
+
+        if (user is null)
+            return Result<UserResponse>.NotFound("User not found.");
+
+        user.Balance += request.Amount;
+        user.UpdateAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Result<UserResponse>.Ok(MapToResponse(user));
+    }
+
     public async Task<Result<bool>> DeleteUser(int id)
     {
         var user = await _context.Users.FindAsync(id);
@@ -84,6 +99,7 @@ public class UserServices : IUserServices
         LastName = u.LastName,
         PhoneNumber = u.PhoneNumber,
         Address = u.Address,
+        Balance = u.Balance,
         IsEmailVerified = u.IsEmailVerified,
         CreatedAt = u.CreatedAt
     };

@@ -18,6 +18,18 @@ public class OrderServices : IOrderServices
         _context = context;
     }
 
+    public async Task<Result<List<OrderResponse>>> GetAllOrders()
+    {
+        var orders = await _context.Orders
+            .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+            .Include(o => o.User)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+
+        return Result<List<OrderResponse>>.Ok(orders.Select(MapToResponse).ToList());
+    }
+
     public async Task<Result<List<OrderResponse>>> GetOrderHistory(int userId)
     {
         var orders = await _context.Orders
@@ -60,6 +72,11 @@ public class OrderServices : IOrderServices
         if (cart is null || !cart.CartItems.Any())
             return Result<OrderResponse>.BadRequest("Cart is empty.");
 
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user is null)
+            return Result<OrderResponse>.NotFound("User not found.");
+
         foreach (var item in cart.CartItems)
         {
             if (item.Product.Status != ProductStatus.Active)
@@ -69,13 +86,18 @@ public class OrderServices : IOrderServices
                 return Result<OrderResponse>.BadRequest($"Insufficient stock for product '{item.Product.Name}'.");
         }
 
+        var totalAmount = cart.CartItems.Sum(ci => ci.Quantity * ci.Product.Price);
+
+        if (user.Balance < totalAmount)
+            return Result<OrderResponse>.BadRequest("Insufficient balance.");
+
         var order = new Order
         {
             UserId = userId,
             Status = OrderStatus.Pending,
             ShippingAddress = request.ShippingAddress,
-            PaymentMethod = request.PaymentMethod,
-            TotalAmount = cart.CartItems.Sum(ci => ci.Quantity * ci.Product.Price),
+            PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Test balance" : request.PaymentMethod,
+            TotalAmount = totalAmount,
             OrderItems = cart.CartItems.Select(ci => new OrderItem
             {
                 ProductId = ci.ProductId,
@@ -96,6 +118,9 @@ public class OrderServices : IOrderServices
             if (updatedRows == 0)
                 return Result<OrderResponse>.BadRequest($"Insufficient stock for product '{item.Product.Name}'.");
         }
+
+        user.Balance -= totalAmount;
+        user.UpdateAt = DateTime.UtcNow;
 
         _context.CartItems.RemoveRange(cart.CartItems);
         _context.Orders.Add(order);
@@ -134,6 +159,9 @@ public class OrderServices : IOrderServices
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(p => p.Stock, p => p.Stock + item.Quantity));
             }
+
+            order.User.Balance += order.TotalAmount;
+            order.User.UpdateAt = DateTime.UtcNow;
         }
 
         order.Status = request.Status;
@@ -170,6 +198,14 @@ public class OrderServices : IOrderServices
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(p => p.Stock, p => p.Stock + item.Quantity));
         }
+
+        var user = await _context.Users.FindAsync(userId);
+
+        if (user is null)
+            return Result<bool>.NotFound("User not found.");
+
+        user.Balance += order.TotalAmount;
+        user.UpdateAt = DateTime.UtcNow;
 
         order.Status = OrderStatus.Cancelled;
         order.UpdateAt = DateTime.UtcNow;

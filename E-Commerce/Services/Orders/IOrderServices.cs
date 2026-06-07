@@ -6,6 +6,7 @@ namespace E_Commerce.Services.Orders;
 
 public interface IOrderServices
 {
+    Task<Result<List<OrderResponse>>> GetAllOrders();
     Task<Result<List<OrderResponse>>> GetOrderHistory(int userId);
     Task<Result<OrderResponse>> GetOrderById(int orderId, int userId);
     Task<Result<OrderResponse>> Checkout(int userId, CreateOrderRequest request);

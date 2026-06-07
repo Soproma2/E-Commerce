@@ -46,6 +46,16 @@ public class UsersController : BaseController
         return ToResponse(result);
     }
 
+    [HttpPost("balance/top-up")]
+    public async Task<IActionResult> TopUpBalance([FromBody] TopUpBalanceRequest request)
+    {
+        if (!TryGetUserId(out var userId))
+            return InvalidUserTokenResponse();
+
+        var result = await _userServices.TopUpBalance(userId, request);
+        return ToResponse(result);
+    }
+
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteUser(int id)

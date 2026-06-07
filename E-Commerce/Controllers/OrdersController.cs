@@ -18,6 +18,12 @@ public class OrdersController : BaseController
     [HttpGet]
     public async Task<IActionResult> GetOrderHistory()
     {
+        if (User.IsInRole("Admin") || User.IsInRole("SalesManager"))
+        {
+            var adminResult = await _orderServices.GetAllOrders();
+            return ToResponse(adminResult);
+        }
+
         if (!TryGetUserId(out var userId))
             return InvalidUserTokenResponse();
 

@@ -11,3 +11,8 @@ public class EditUserRequest
     public bool ClearPhoneNumber { get; set; }
     public bool ClearAddress { get; set; }
 }
+
+public class TopUpBalanceRequest
+{
+    public decimal Amount { get; set; }
+}

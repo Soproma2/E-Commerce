@@ -13,6 +13,7 @@ public class User : Entity
     public string? LastName { get; set; }
     public string? PhoneNumber { get; set; }
     public string? Address { get; set; }
+    public decimal Balance { get; set; } = 1000m;
     public bool IsEmailVerified { get; set; }
     public string? EmailVerificationTokenHash { get; set; }
     public DateTime? EmailVerificationTokenExpiresAt { get; set; }

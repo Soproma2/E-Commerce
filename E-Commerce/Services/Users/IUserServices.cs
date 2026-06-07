@@ -9,5 +9,6 @@ public interface IUserServices
     Task<Result<List<UserResponse>>> GetUsers();
     Task<Result<UserResponse>> GetUserById(int id);
     Task<Result<UserResponse>> EditUser(int userId, EditUserRequest request);
+    Task<Result<UserResponse>> TopUpBalance(int userId, TopUpBalanceRequest request);
     Task<Result<bool>> DeleteUser(int id);
 }
