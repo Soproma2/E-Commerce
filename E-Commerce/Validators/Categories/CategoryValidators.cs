@@ -18,6 +18,10 @@ public class CreateCategoryValidator : AbstractValidator<CreateCategoryRequest>
         RuleFor(x => x.ParentId)
             .GreaterThan(0).WithMessage("Parent category ID must be greater than 0.")
             .When(x => x.ParentId.HasValue);
+
+        RuleFor(x => x.DiscountPercent)
+            .InclusiveBetween(0, 100).WithMessage("Discount must be between 0 and 100.")
+            .When(x => x.DiscountPercent.HasValue);
     }
 }
 
@@ -49,5 +53,27 @@ public class UpdateCategoryValidator : AbstractValidator<UpdateCategoryRequest>
         RuleFor(x => x)
             .Must(x => !(x.ClearParent && x.ParentId.HasValue))
             .WithMessage("Parent cannot be set and cleared at the same time.");
+
+        RuleFor(x => x.DiscountPercent)
+            .InclusiveBetween(0, 100).WithMessage("Discount must be between 0 and 100.")
+            .When(x => x.DiscountPercent.HasValue);
+
+        RuleFor(x => x)
+            .Must(x => !(x.ClearDiscount && x.DiscountPercent.HasValue))
+            .WithMessage("Discount cannot be set and cleared at the same time.");
+    }
+}
+
+public class UpdateCategoryDiscountValidator : AbstractValidator<UpdateCategoryDiscountRequest>
+{
+    public UpdateCategoryDiscountValidator()
+    {
+        RuleFor(x => x.DiscountPercent)
+            .InclusiveBetween(0, 100).WithMessage("Discount must be between 0 and 100.")
+            .When(x => x.DiscountPercent.HasValue);
+
+        RuleFor(x => x)
+            .Must(x => !(x.ClearDiscount && x.DiscountPercent.HasValue))
+            .WithMessage("Discount cannot be set and cleared at the same time.");
     }
 }

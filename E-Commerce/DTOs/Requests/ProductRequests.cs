@@ -12,6 +12,7 @@ public class CreateProductRequest
     public int Stock { get; set; }
     public string[]? Images { get; set; }
     public ProductStatus Status { get; set; } = ProductStatus.Active;
+    public decimal? DiscountPercent { get; set; }
 }
 
 public class UpdateProductRequest
@@ -23,8 +24,10 @@ public class UpdateProductRequest
     public int? Stock { get; set; }
     public string[]? Images { get; set; }
     public ProductStatus? Status { get; set; }
+    public decimal? DiscountPercent { get; set; }
     public bool ClearDescription { get; set; }
     public bool ClearImages { get; set; }
+    public bool ClearDiscount { get; set; }
 }
 
 public class FilterProductsRequest : PagedRequest

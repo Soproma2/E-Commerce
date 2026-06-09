@@ -8,5 +8,6 @@ public class CategoryResponse
     public string? Image { get; set; }
     public int? ParentId { get; set; }
     public string? ParentName { get; set; }
+    public decimal? DiscountPercent { get; set; }
     public List<CategoryResponse> SubCategories { get; set; } = new List<CategoryResponse>();
 }

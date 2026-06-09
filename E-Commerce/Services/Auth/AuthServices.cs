@@ -6,6 +6,7 @@ using E_Commerce.DTOs.Responses;
 using E_Commerce.Enums;
 using E_Commerce.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -18,12 +19,14 @@ public class AuthServices : IAuthServices
     private readonly DataContext _context;
     private readonly JwtService _jwtService;
     private readonly SmtpServices _smtpServices;
+    private readonly ILogger<AuthServices> _logger;
 
-    public AuthServices(DataContext context, JwtService jwtService, SmtpServices smtpServices)
+    public AuthServices(DataContext context, JwtService jwtService, SmtpServices smtpServices, ILogger<AuthServices> logger)
     {
         _context = context;
         _jwtService = jwtService;
         _smtpServices = smtpServices;
+        _logger = logger;
     }
 
     public async Task<Result<bool>> Register(RegisterRequest request)
@@ -64,8 +67,9 @@ public class AuthServices : IAuthServices
         {
             SendVerificationEmail(user.Email, emailVerificationCode);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
 
@@ -125,7 +129,7 @@ public class AuthServices : IAuthServices
         if (!_smtpServices.IsConfigured)
             return Result<bool>.BadRequest("Email service is not configured.");
 
-        var resetToken = GenerateSecureToken();
+        var resetToken = GenerateVerificationCode();
 
         user.PasswordResetTokenHash = HashToken(resetToken);
         user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
@@ -137,11 +141,12 @@ public class AuthServices : IAuthServices
             _smtpServices.SendEmail(
                 subject: "Password Reset",
                 email: user.Email,
-                body: $"Your password reset token: {resetToken}"
+                body: $"<h2>Password Reset</h2><p>Your password reset code:</p><h1 style='letter-spacing:6px'>{resetToken}</h1><p>This code expires in 1 hour.</p>"
             );
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to send password reset email to {Email}", user.Email);
             user.PasswordResetTokenHash = null;
             user.PasswordResetTokenExpiresAt = null;
             user.UpdateAt = DateTime.UtcNow;
@@ -241,8 +246,9 @@ public class AuthServices : IAuthServices
         {
             SendVerificationEmail(user.Email, emailVerificationCode);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
             user.EmailVerificationTokenHash = null;
             user.EmailVerificationTokenExpiresAt = null;
             user.UpdateAt = DateTime.UtcNow;
@@ -274,7 +280,7 @@ public class AuthServices : IAuthServices
         _smtpServices.SendEmail(
             subject: "Email Verification",
             email: email,
-            body: $"Your email verification code: {code}\n\nThis code expires in {EmailVerificationCodeMinutes} minutes."
+            body: $"<h2>Email Verification</h2><p>Your verification code:</p><h1 style='letter-spacing:6px'>{code}</h1><p>This code expires in {EmailVerificationCodeMinutes} minutes.</p>"
         );
     }
 }

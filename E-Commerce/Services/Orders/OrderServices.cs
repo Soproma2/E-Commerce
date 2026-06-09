@@ -1,3 +1,4 @@
+using E_Commerce.Common.Pricing;
 using E_Commerce.Common.Results;
 using E_Commerce.Data;
 using E_Commerce.DTOs.Requests;
@@ -62,11 +63,12 @@ public class OrderServices : IOrderServices
 
     public async Task<Result<OrderResponse>> Checkout(int userId, CreateOrderRequest request)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
         var cart = await _context.Carts
             .Include(c => c.CartItems)
                 .ThenInclude(ci => ci.Product)
+                    .ThenInclude(p => p.Category)
             .FirstOrDefaultAsync(c => c.UserId == userId);
 
         if (cart is null || !cart.CartItems.Any())
@@ -86,7 +88,12 @@ public class OrderServices : IOrderServices
                 return Result<OrderResponse>.BadRequest($"Insufficient stock for product '{item.Product.Name}'.");
         }
 
-        var totalAmount = cart.CartItems.Sum(ci => ci.Quantity * ci.Product.Price);
+        var totalAmount = cart.CartItems.Sum(ci =>
+        {
+            var discount = PriceCalculator.GetEffectiveDiscountPercent(ci.Product);
+            var unitPrice = PriceCalculator.GetDiscountedPrice(ci.Product.Price, discount);
+            return ci.Quantity * unitPrice;
+        });
 
         if (user.Balance < totalAmount)
             return Result<OrderResponse>.BadRequest("Insufficient balance.");
@@ -98,11 +105,17 @@ public class OrderServices : IOrderServices
             ShippingAddress = request.ShippingAddress,
             PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "Test balance" : request.PaymentMethod,
             TotalAmount = totalAmount,
-            OrderItems = cart.CartItems.Select(ci => new OrderItem
+            OrderItems = cart.CartItems.Select(ci =>
             {
-                ProductId = ci.ProductId,
-                Quantity = ci.Quantity,
-                Price = ci.Product.Price
+                var discount = PriceCalculator.GetEffectiveDiscountPercent(ci.Product);
+                var unitPrice = PriceCalculator.GetDiscountedPrice(ci.Product.Price, discount);
+
+                return new OrderItem
+                {
+                    ProductId = ci.ProductId,
+                    Quantity = ci.Quantity,
+                    Price = unitPrice
+                };
             }).ToList()
         };
 
@@ -136,7 +149,7 @@ public class OrderServices : IOrderServices
 
     public async Task<Result<OrderResponse>> UpdateOrderStatus(int orderId, UpdateOrderStatusRequest request)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
         var order = await _context.Orders
             .Include(o => o.OrderItems)
@@ -175,7 +188,7 @@ public class OrderServices : IOrderServices
 
     public async Task<Result<bool>> CancelOrder(int orderId, int userId)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        await using var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
 
         var order = await _context.Orders
             .Include(o => o.OrderItems)

@@ -10,5 +10,6 @@ public interface ICategoryServices
     Task<Result<CategoryResponse>> GetCategoryById(int id);
     Task<Result<CategoryResponse>> CreateCategory(CreateCategoryRequest request);
     Task<Result<CategoryResponse>> UpdateCategory(int id, UpdateCategoryRequest request);
+    Task<Result<CategoryResponse>> UpdateCategoryDiscount(int id, UpdateCategoryDiscountRequest request);
     Task<Result<bool>> DeleteCategory(int id);
 }

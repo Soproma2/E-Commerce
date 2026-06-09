@@ -17,6 +17,7 @@ public class DataContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Cart> Carts => Set<Cart>();
     public DbSet<CartItem> CartItems => Set<CartItem>();
+    public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -89,6 +90,9 @@ public class DataContext : DbContext
                 .WithOne(p => p.Category)
                 .HasForeignKey(p => p.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            e.Property(c => c.DiscountPercent)
+                .HasColumnType("decimal(5,2)");
         });
 
         // ─── Product ─────────────────────────────────────────────
@@ -103,6 +107,9 @@ public class DataContext : DbContext
 
             e.Property(p => p.Price)
                 .HasColumnType("decimal(18,2)");
+
+            e.Property(p => p.DiscountPercent)
+                .HasColumnType("decimal(5,2)");
 
             e.Property(p => p.Status)
                 .HasConversion<string>()
@@ -179,6 +186,33 @@ public class DataContext : DbContext
                 .WithMany(p => p.CartItems)
                 .HasForeignKey(ci => ci.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ─── ProductReview ───────────────────────────────────────
+        modelBuilder.Entity<ProductReview>(e =>
+        {
+            e.ToTable("ProductReviews");
+            e.HasKey(r => r.Id);
+
+            e.Property(r => r.Rating)
+                .IsRequired();
+
+            e.Property(r => r.Comment)
+                .IsRequired()
+                .HasMaxLength(2000);
+
+            e.HasIndex(r => new { r.UserId, r.ProductId })
+                .IsUnique();
+
+            e.HasOne(r => r.User)
+                .WithMany(u => u.Reviews)
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(r => r.Product)
+                .WithMany(p => p.Reviews)
+                .HasForeignKey(r => r.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

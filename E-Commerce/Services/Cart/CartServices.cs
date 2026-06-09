@@ -1,3 +1,4 @@
+using E_Commerce.Common.Pricing;
 using E_Commerce.Common.Results;
 using E_Commerce.Data;
 using E_Commerce.DTOs.Requests;
@@ -60,7 +61,10 @@ public class CartServices : ICartServices
 
         await _context.Entry(cart).Collection(c => c.CartItems).LoadAsync();
         foreach (var item in cart.CartItems)
+        {
             await _context.Entry(item).Reference(ci => ci.Product).LoadAsync();
+            await _context.Entry(item.Product).Reference(p => p.Category).LoadAsync();
+        }
 
         return Result<CartResponse>.Ok(MapToResponse(cart));
     }
@@ -137,6 +141,7 @@ public class CartServices : ICartServices
         return await _context.Carts
             .Include(c => c.CartItems)
                 .ThenInclude(ci => ci.Product)
+                    .ThenInclude(p => p.Category)
             .FirstOrDefaultAsync(c => c.UserId == userId);
     }
 
@@ -144,14 +149,20 @@ public class CartServices : ICartServices
     {
         Id = c.Id,
         UserId = c.UserId,
-        CartItems = c.CartItems.Select(ci => new CartItemResponse
+        CartItems = c.CartItems.Select(ci =>
         {
-            Id = ci.Id,
-            ProductId = ci.ProductId,
-            ProductName = ci.Product.Name,
-            ProductImages = ci.Product.Images,
-            UnitPrice = ci.Product.Price,
-            Quantity = ci.Quantity
+            var discount = PriceCalculator.GetEffectiveDiscountPercent(ci.Product);
+            var unitPrice = PriceCalculator.GetDiscountedPrice(ci.Product.Price, discount);
+
+            return new CartItemResponse
+            {
+                Id = ci.Id,
+                ProductId = ci.ProductId,
+                ProductName = ci.Product.Name,
+                ProductImages = ci.Product.Images,
+                UnitPrice = unitPrice,
+                Quantity = ci.Quantity
+            };
         }).ToList()
     };
 }

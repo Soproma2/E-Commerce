@@ -18,25 +18,27 @@ public class CategoryServices : ICategoryServices
 
     public async Task<Result<List<CategoryResponse>>> GetCategories()
     {
-        var categories = await _context.Categories
-            .Include(c => c.SubCategories)
-            .Where(c => c.ParentId == null)
-            .ToListAsync();
+        var allCategories = await _context.Categories.ToListAsync();
 
-        return Result<List<CategoryResponse>>.Ok(categories.Select(MapToResponse).ToList());
+        var roots = allCategories
+            .Where(c => c.ParentId == null)
+            .Select(c => BuildTree(c, allCategories))
+            .ToList();
+
+        return Result<List<CategoryResponse>>.Ok(roots);
     }
 
     public async Task<Result<CategoryResponse>> GetCategoryById(int id)
     {
-        var category = await _context.Categories
-            .Include(c => c.SubCategories)
-            .Include(c => c.Parent)
-            .FirstOrDefaultAsync(c => c.Id == id);
+        var allCategories = await _context.Categories.ToListAsync();
+        var category = allCategories.FirstOrDefault(c => c.Id == id);
 
         if (category is null)
             return Result<CategoryResponse>.NotFound("Category not found.");
 
-        return Result<CategoryResponse>.Ok(MapToResponse(category));
+        category.Parent = allCategories.FirstOrDefault(c => c.Id == category.ParentId);
+
+        return Result<CategoryResponse>.Ok(BuildTree(category, allCategories));
     }
 
     public async Task<Result<CategoryResponse>> CreateCategory(CreateCategoryRequest request)
@@ -53,7 +55,8 @@ public class CategoryServices : ICategoryServices
             Name = request.Name,
             Description = request.Description,
             Image = request.Image,
-            ParentId = request.ParentId
+            ParentId = request.ParentId,
+            DiscountPercent = request.DiscountPercent
         };
 
         _context.Categories.Add(category);
@@ -96,6 +99,30 @@ public class CategoryServices : ICategoryServices
         else if (request.Description is not null) category.Description = request.Description;
         if (request.ClearImage) category.Image = null;
         else if (request.Image is not null) category.Image = request.Image;
+        if (request.ClearDiscount) category.DiscountPercent = null;
+        else if (request.DiscountPercent.HasValue) category.DiscountPercent = request.DiscountPercent;
+
+        category.UpdateAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Result<CategoryResponse>.Ok(MapToResponse(category));
+    }
+
+    public async Task<Result<CategoryResponse>> UpdateCategoryDiscount(int id, UpdateCategoryDiscountRequest request)
+    {
+        var category = await _context.Categories
+            .Include(c => c.SubCategories)
+            .Include(c => c.Parent)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (category is null)
+            return Result<CategoryResponse>.NotFound("Category not found.");
+
+        if (request.ClearDiscount)
+            category.DiscountPercent = null;
+        else if (request.DiscountPercent.HasValue)
+            category.DiscountPercent = request.DiscountPercent;
 
         category.UpdateAt = DateTime.UtcNow;
 
@@ -134,8 +161,28 @@ public class CategoryServices : ICategoryServices
         Image = c.Image,
         ParentId = c.ParentId,
         ParentName = c.Parent?.Name,
+        DiscountPercent = c.DiscountPercent,
         SubCategories = c.SubCategories.Select(MapToResponse).ToList()
     };
+
+    private static CategoryResponse BuildTree(Category category, List<Category> allCategories)
+    {
+        var children = allCategories
+            .Where(c => c.ParentId == category.Id)
+            .ToList();
+
+        return new CategoryResponse
+        {
+            Id = category.Id,
+            Name = category.Name,
+            Description = category.Description,
+            Image = category.Image,
+            ParentId = category.ParentId,
+            ParentName = category.Parent?.Name,
+            DiscountPercent = category.DiscountPercent,
+            SubCategories = children.Select(c => BuildTree(c, allCategories)).ToList()
+        };
+    }
 
     private async Task<bool> WouldCreateCycle(int categoryId, int parentId)
     {

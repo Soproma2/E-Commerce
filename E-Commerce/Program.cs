@@ -1,11 +1,13 @@
 using System.Text;
 using E_Commerce.Common.Services;
 using E_Commerce.Data;
+using E_Commerce.Extensions;
 using E_Commerce.Services.Auth;
 using E_Commerce.Services.Cart;
 using E_Commerce.Services.Categories;
 using E_Commerce.Services.Orders;
 using E_Commerce.Services.Products;
+using E_Commerce.Services.Reviews;
 using E_Commerce.Services.Users;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -28,6 +30,7 @@ builder.Services.AddScoped<ICategoryServices, CategoryServices>();
 builder.Services.AddScoped<IOrderServices, OrderServices>();
 builder.Services.AddScoped<ICartServices, CartServices>();
 builder.Services.AddScoped<IUserServices, UserServices>();
+builder.Services.AddScoped<IReviewServices, ReviewServices>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<SmtpServices>();
 
@@ -123,6 +126,8 @@ builder.Services.AddControllers();
 
 // ─── App ─────────────────────────────────────────────────────
 var app = builder.Build();
+
+app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

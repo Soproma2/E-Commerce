@@ -12,9 +12,11 @@ public class Product : Entity
     public int Stock { get; set; }
     public string[]? Images { get; set; }
     public ProductStatus Status { get; set; } = ProductStatus.Active;
+    public decimal? DiscountPercent { get; set; }
 
     // Navigation
     public Category Category { get; set; } = null!;
     public List<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public List<CartItem> CartItems { get; set; } = new List<CartItem>();
+    public List<ProductReview> Reviews { get; set; } = new List<ProductReview>();
 }

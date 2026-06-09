@@ -1,4 +1,5 @@
 using E_Commerce.Common.DTOs.Responses;
+using E_Commerce.Common.Pricing;
 using E_Commerce.Common.Results;
 using E_Commerce.Data;
 using E_Commerce.DTOs.Requests;
@@ -45,28 +46,9 @@ public class ProductServices : IProductServices
         var products = await query
             .Skip((request.Page - 1) * request.Take)
             .Take(request.Take)
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                p.Price,
-                p.Stock,
-                p.Images,
-                p.Status,
-                CategoryName = p.Category.Name
-            })
             .ToListAsync();
 
-        var items = products.Select(p => new ProductResponse
-        {
-            Id = p.Id,
-            Name = p.Name,
-            Price = p.Price,
-            Stock = p.Stock,
-            Images = p.Images == null ? null : p.Images.Take(1).ToArray(),
-            Status = p.Status,
-            CategoryName = p.CategoryName
-        }).ToList();
+        var items = products.Select(MapToList).ToList();
 
         return Result<Paged<ProductResponse>>.Ok(new Paged<ProductResponse>(items, totalCount, request.Page, request.Take));
     }
@@ -80,7 +62,12 @@ public class ProductServices : IProductServices
         if (product is null)
             return Result<ProductDetailsResponse>.NotFound("Product not found.");
 
-        return Result<ProductDetailsResponse>.Ok(MapToDetails(product));
+        var reviewStats = await GetReviewStats(id);
+
+        return Result<ProductDetailsResponse>.Ok(MapToDetails(
+            product,
+            reviewStats.reviewCount,
+            reviewStats.averageRating));
     }
 
     public async Task<Result<ProductDetailsResponse>> CreateProduct(CreateProductRequest request)
@@ -98,7 +85,8 @@ public class ProductServices : IProductServices
             CategoryId = request.CategoryId,
             Stock = request.Stock,
             Images = request.Images,
-            Status = request.Status
+            Status = request.Status,
+            DiscountPercent = request.DiscountPercent
         };
 
         _context.Products.Add(product);
@@ -106,7 +94,7 @@ public class ProductServices : IProductServices
 
         await _context.Entry(product).Reference(p => p.Category).LoadAsync();
 
-        return Result<ProductDetailsResponse>.Success(201, MapToDetails(product));
+        return Result<ProductDetailsResponse>.Success(201, MapToDetails(product, 0, null));
     }
 
     public async Task<Result<ProductDetailsResponse>> UpdateProduct(int id, UpdateProductRequest request)
@@ -135,13 +123,17 @@ public class ProductServices : IProductServices
         if (request.ClearImages) product.Images = null;
         else if (request.Images is not null) product.Images = request.Images;
         if (request.Status.HasValue) product.Status = request.Status.Value;
+        if (request.ClearDiscount) product.DiscountPercent = null;
+        else if (request.DiscountPercent.HasValue) product.DiscountPercent = request.DiscountPercent;
 
         product.UpdateAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
         await _context.Entry(product).Reference(p => p.Category).LoadAsync();
 
-        return Result<ProductDetailsResponse>.Ok(MapToDetails(product));
+        var (reviewCount, averageRating) = await GetReviewStats(product.Id);
+
+        return Result<ProductDetailsResponse>.Ok(MapToDetails(product, reviewCount, averageRating));
     }
 
     public async Task<Result<bool>> DeleteProduct(int id)
@@ -165,17 +157,60 @@ public class ProductServices : IProductServices
         return Result<bool>.Ok(true);
     }
 
-    private static ProductDetailsResponse MapToDetails(Product p) => new()
+    private static ProductResponse MapToList(Product p)
     {
-        Id = p.Id,
-        Name = p.Name,
-        Description = p.Description,
-        Price = p.Price,
-        CategoryId = p.CategoryId,
-        CategoryName = p.Category.Name,
-        Stock = p.Stock,
-        Images = p.Images,
-        Status = p.Status,
-        CreatedAt = p.CreatedAt
-    };
+        var discount = PriceCalculator.GetEffectiveDiscountPercent(p);
+
+        return new ProductResponse
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Price = p.Price,
+            DiscountPercent = discount > 0 ? discount : null,
+            FinalPrice = PriceCalculator.GetDiscountedPrice(p.Price, discount),
+            Stock = p.Stock,
+            Images = p.Images == null ? null : p.Images.Take(1).ToArray(),
+            Status = p.Status,
+            CategoryName = p.Category.Name
+        };
+    }
+
+    private async Task<(int reviewCount, double? averageRating)> GetReviewStats(int productId)
+    {
+        var reviewStats = await _context.ProductReviews
+            .Where(r => r.ProductId == productId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Count = g.Count(),
+                Average = g.Average(r => (double)r.Rating)
+            })
+            .FirstOrDefaultAsync();
+
+        return (reviewStats?.Count ?? 0, reviewStats?.Average);
+    }
+
+    private static ProductDetailsResponse MapToDetails(Product p, int reviewCount, double? averageRating)
+    {
+        var effectiveDiscount = PriceCalculator.GetEffectiveDiscountPercent(p);
+
+        return new ProductDetailsResponse
+        {
+            Id = p.Id,
+            Name = p.Name,
+            Description = p.Description,
+            Price = p.Price,
+            DiscountPercent = p.DiscountPercent,
+            EffectiveDiscountPercent = effectiveDiscount > 0 ? effectiveDiscount : null,
+            FinalPrice = PriceCalculator.GetDiscountedPrice(p.Price, effectiveDiscount),
+            CategoryId = p.CategoryId,
+            CategoryName = p.Category.Name,
+            Stock = p.Stock,
+            Images = p.Images,
+            Status = p.Status,
+            CreatedAt = p.CreatedAt,
+            ReviewCount = reviewCount,
+            AverageRating = reviewCount > 0 ? Math.Round(averageRating!.Value, 1) : null
+        };
+    }
 }

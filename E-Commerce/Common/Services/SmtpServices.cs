@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Mail;
 
 namespace E_Commerce.Common.Services
@@ -34,7 +34,7 @@ namespace E_Commerce.Common.Services
             mail.Subject = subject;
             mail.Body = body;
             mail.To.Add(email);
-            mail.IsBodyHtml = false;
+            mail.IsBodyHtml = true;
 
             using var smtp = new SmtpClient(host)
 

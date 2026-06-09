@@ -44,6 +44,14 @@ public class CategoriesController : BaseController
         return ToResponse(result);
     }
 
+    [Authorize(Roles = "Admin,SalesManager")]
+    [HttpPut("{id}/discount")]
+    public async Task<IActionResult> UpdateCategoryDiscount(int id, [FromBody] UpdateCategoryDiscountRequest request)
+    {
+        var result = await _categoryServices.UpdateCategoryDiscount(id, request);
+        return ToResponse(result);
+    }
+
     [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteCategory(int id)

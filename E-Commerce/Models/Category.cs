@@ -7,6 +7,7 @@ public class Category : Entity
     public string? Description { get; set; }
     public string? Image { get; set; }
     public int? ParentId { get; set; }
+    public decimal? DiscountPercent { get; set; }
 
     // Navigation
     public Category? Parent { get; set; }
