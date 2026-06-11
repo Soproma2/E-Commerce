@@ -23,5 +23,7 @@ public class User : Entity
     // Navigation
     public List<Order> Orders { get; set; } = new List<Order>();
     public List<ProductReview> Reviews { get; set; } = new List<ProductReview>();
+    public List<WishlistItem> Wishlist { get; set; } = new List<WishlistItem>();
+    public List<UserAddress> Addresses { get; set; } = new List<UserAddress>();
     public Cart? Cart { get; set; }
 }

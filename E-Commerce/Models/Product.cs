@@ -19,4 +19,5 @@ public class Product : Entity
     public List<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public List<CartItem> CartItems { get; set; } = new List<CartItem>();
     public List<ProductReview> Reviews { get; set; } = new List<ProductReview>();
+    public List<WishlistItem> WishlistItems { get; set; } = new List<WishlistItem>();
 }

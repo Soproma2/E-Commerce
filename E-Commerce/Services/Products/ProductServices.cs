@@ -13,14 +13,19 @@ namespace E_Commerce.Services.Products;
 public class ProductServices : IProductServices
 {
     private readonly DataContext _context;
+    private readonly INotificationServices _notificationServices;
+    private readonly IPromotionServices _promotionServices;
 
-    public ProductServices(DataContext context)
+    public ProductServices(DataContext context, INotificationServices notificationServices, IPromotionServices promotionServices)
     {
         _context = context;
+        _notificationServices = notificationServices;
+        _promotionServices = promotionServices;
     }
 
     public async Task<Result<Paged<ProductResponse>>> GetProducts(FilterProductsRequest request)
     {
+        var activePromotions = await _promotionServices.GetActivePromotions();
         var query = _context.Products
             .Include(p => p.Category)
             .AsQueryable();
@@ -48,7 +53,7 @@ public class ProductServices : IProductServices
             .Take(request.Take)
             .ToListAsync();
 
-        var items = products.Select(MapToList).ToList();
+        var items = products.Select(p => MapToList(p, activePromotions)).ToList();
 
         return Result<Paged<ProductResponse>>.Ok(new Paged<ProductResponse>(items, totalCount, request.Page, request.Take));
     }
@@ -62,12 +67,14 @@ public class ProductServices : IProductServices
         if (product is null)
             return Result<ProductDetailsResponse>.NotFound("Product not found.");
 
+        var activePromotions = await _promotionServices.GetActivePromotions();
         var reviewStats = await GetReviewStats(id);
 
         return Result<ProductDetailsResponse>.Ok(MapToDetails(
             product,
             reviewStats.reviewCount,
-            reviewStats.averageRating));
+            reviewStats.averageRating,
+            activePromotions));
     }
 
     public async Task<Result<ProductDetailsResponse>> CreateProduct(CreateProductRequest request)
@@ -93,8 +100,9 @@ public class ProductServices : IProductServices
         await _context.SaveChangesAsync();
 
         await _context.Entry(product).Reference(p => p.Category).LoadAsync();
+        await _notificationServices.CheckLowStock(product.Id);
 
-        return Result<ProductDetailsResponse>.Success(201, MapToDetails(product, 0, null));
+        return Result<ProductDetailsResponse>.Success(201, MapToDetails(product, 0, null, new List<Promotion>()));
     }
 
     public async Task<Result<ProductDetailsResponse>> UpdateProduct(int id, UpdateProductRequest request)
@@ -130,10 +138,12 @@ public class ProductServices : IProductServices
 
         await _context.SaveChangesAsync();
         await _context.Entry(product).Reference(p => p.Category).LoadAsync();
+        await _notificationServices.CheckLowStock(product.Id);
 
         var (reviewCount, averageRating) = await GetReviewStats(product.Id);
+        var activePromotions = await _promotionServices.GetActivePromotions();
 
-        return Result<ProductDetailsResponse>.Ok(MapToDetails(product, reviewCount, averageRating));
+        return Result<ProductDetailsResponse>.Ok(MapToDetails(product, reviewCount, averageRating, activePromotions));
     }
 
     public async Task<Result<bool>> DeleteProduct(int id)
@@ -157,22 +167,36 @@ public class ProductServices : IProductServices
         return Result<bool>.Ok(true);
     }
 
-    private static ProductResponse MapToList(Product p)
+    private static ProductResponse MapToList(Product p, List<Promotion> activePromotions)
     {
-        var discount = PriceCalculator.GetEffectiveDiscountPercent(p);
+        var effectiveDiscount = GetFinalEffectiveDiscount(p, activePromotions);
 
         return new ProductResponse
         {
             Id = p.Id,
             Name = p.Name,
             Price = p.Price,
-            DiscountPercent = discount > 0 ? discount : null,
-            FinalPrice = PriceCalculator.GetDiscountedPrice(p.Price, discount),
+            DiscountPercent = effectiveDiscount > 0 ? effectiveDiscount : null,
+            FinalPrice = PriceCalculator.GetDiscountedPrice(p.Price, effectiveDiscount),
             Stock = p.Stock,
             Images = p.Images == null ? null : p.Images.Take(1).ToArray(),
             Status = p.Status,
             CategoryName = p.Category.Name
         };
+    }
+
+    private static decimal GetFinalEffectiveDiscount(Product p, List<Promotion> activePromotions)
+    {
+        var baseDiscount = PriceCalculator.GetEffectiveDiscountPercent(p);
+        
+        var promo = activePromotions.FirstOrDefault(pr => 
+            (pr.ProductId == p.Id) || 
+            (pr.CategoryId == p.CategoryId && pr.ProductId == null));
+
+        if (promo != null && promo.DiscountPercent > baseDiscount)
+            return promo.DiscountPercent;
+
+        return baseDiscount;
     }
 
     private async Task<(int reviewCount, double? averageRating)> GetReviewStats(int productId)
@@ -190,9 +214,9 @@ public class ProductServices : IProductServices
         return (reviewStats?.Count ?? 0, reviewStats?.Average);
     }
 
-    private static ProductDetailsResponse MapToDetails(Product p, int reviewCount, double? averageRating)
+    private static ProductDetailsResponse MapToDetails(Product p, int reviewCount, double? averageRating, List<Promotion> activePromotions)
     {
-        var effectiveDiscount = PriceCalculator.GetEffectiveDiscountPercent(p);
+        var effectiveDiscount = GetFinalEffectiveDiscount(p, activePromotions);
 
         return new ProductDetailsResponse
         {

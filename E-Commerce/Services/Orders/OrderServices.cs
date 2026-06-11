@@ -7,16 +7,19 @@ using E_Commerce.Enums;
 using E_Commerce.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using E_Commerce.Services.Products;
 
 namespace E_Commerce.Services.Orders;
 
 public class OrderServices : IOrderServices
 {
     private readonly DataContext _context;
+    private readonly INotificationServices _notificationServices;
 
-    public OrderServices(DataContext context)
+    public OrderServices(DataContext context, INotificationServices notificationServices)
     {
         _context = context;
+        _notificationServices = notificationServices;
     }
 
     public async Task<Result<List<OrderResponse>>> GetAllOrders()
@@ -139,6 +142,11 @@ public class OrderServices : IOrderServices
         _context.Orders.Add(order);
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();
+
+        foreach (var item in order.OrderItems)
+        {
+            await _notificationServices.CheckLowStock(item.ProductId);
+        }
 
         await _context.Entry(order).Reference(o => o.User).LoadAsync();
         foreach (var oi in order.OrderItems)

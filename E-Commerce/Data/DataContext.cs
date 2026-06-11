@@ -18,6 +18,10 @@ public class DataContext : DbContext
     public DbSet<Cart> Carts => Set<Cart>();
     public DbSet<CartItem> CartItems => Set<CartItem>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
+    public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+    public DbSet<UserAddress> UserAddresses => Set<UserAddress>();
+    public DbSet<Promotion> Promotions => Set<Promotion>();
+    public DbSet<AdminNotification> AdminNotifications => Set<AdminNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -213,6 +217,74 @@ public class DataContext : DbContext
                 .WithMany(p => p.Reviews)
                 .HasForeignKey(r => r.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ─── WishlistItem ───────────────────────────────────────
+        modelBuilder.Entity<WishlistItem>(e =>
+        {
+            e.ToTable("WishlistItems");
+            e.HasKey(w => w.Id);
+
+            e.HasIndex(w => new { w.UserId, w.ProductId })
+                .IsUnique();
+
+            e.HasOne(w => w.User)
+                .WithMany(u => u.Wishlist)
+                .HasForeignKey(w => w.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(w => w.Product)
+                .WithMany(p => p.WishlistItems)
+                .HasForeignKey(w => w.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ─── UserAddress ────────────────────────────────────────
+        modelBuilder.Entity<UserAddress>(e =>
+        {
+            e.ToTable("UserAddresses");
+            e.HasKey(a => a.Id);
+
+            e.Property(a => a.FullName).IsRequired().HasMaxLength(100);
+            e.Property(a => a.Street).IsRequired().HasMaxLength(200);
+            e.Property(a => a.City).IsRequired().HasMaxLength(100);
+            e.Property(a => a.Country).IsRequired().HasMaxLength(100);
+            e.Property(a => a.ZipCode).IsRequired().HasMaxLength(20);
+
+            e.HasOne(a => a.User)
+                .WithMany(u => u.Addresses)
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ─── Promotion ──────────────────────────────────────────
+        modelBuilder.Entity<Promotion>(e =>
+        {
+            e.ToTable("Promotions");
+            e.HasKey(p => p.Id);
+
+            e.Property(p => p.Name).IsRequired().HasMaxLength(100);
+            e.Property(p => p.DiscountPercent).HasColumnType("decimal(5,2)");
+
+            e.HasOne(p => p.Product)
+                .WithMany()
+                .HasForeignKey(p => p.ProductId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(p => p.Category)
+                .WithMany()
+                .HasForeignKey(p => p.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ─── AdminNotification ──────────────────────────────────
+        modelBuilder.Entity<AdminNotification>(e =>
+        {
+            e.ToTable("AdminNotifications");
+            e.HasKey(n => n.Id);
+
+            e.Property(n => n.Message).IsRequired().HasMaxLength(500);
+            e.Property(n => n.Type).HasMaxLength(50);
         });
     }
 }
